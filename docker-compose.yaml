@@ -1,0 +1,113 @@
+version: "3"
+
+services:
+
+  # run 1 hello world api
+  test_learn_hello1: 
+    container_name: ${PROJECT_NAME}1
+    image: golang:1.14.4
+    expose:
+      - ${HELLO_EXPOSED_PORT1}
+    volumes: 
+      - ./go:/app/hello
+    networks:
+      test_net:
+        ipv4_address: ${LEARN_HELLO_1}
+    tty: true
+    command:  ["go", "run", "/app/hello/main.go", "-p", "4000"]
+  
+  # run 2 hello world api
+  test_learn_hello2: 
+    container_name: ${PROJECT_NAME}2
+    image: golang:1.14.4
+    expose:
+      - ${HELLO_EXPOSED_PORT2}
+    volumes: 
+      - ./go:/app/hello
+    networks:
+      test_net:
+        ipv4_address: ${LEARN_HELLO_2}
+    tty: true
+    command:  ["go", "run", "/app/hello/main.go", "-p", "4001"]
+
+  # run 1 ha proxy config
+  test_learn_ha: 
+    container_name: ${PROJECT_NAME}_haproxy
+    image: haproxy:2.3
+    ports: 
+      - ${HA_PROXY_PORT}:${HA_PROXY_PORT}
+    expose:
+      - ${HA_PROXY_PORT}
+    volumes: 
+      - ./haproxy_cfg:/usr/local/etc/haproxy/
+    networks:
+      test_net:
+        ipv4_address: ${HA_PROXY_IP}
+    depends_on:
+      - test_learn_hello1
+      - test_learn_hello2
+    environment:
+      - LEARN_HELLO_1=${LEARN_HELLO_1}
+      - LEARN_HELLO_2=${LEARN_HELLO_2}
+      - HELLO_EXPOSED_PORT1=${HELLO_EXPOSED_PORT1}
+      - HELLO_EXPOSED_PORT2=${HELLO_EXPOSED_PORT2}
+    tty: true
+
+  # run ha exporter prometheus
+  test_learn_ha_exporter:
+    container_name: ${PROJECT_NAME}_ha_exporter
+    image: prom/haproxy-exporter:v0.12.0
+    ports:
+      - ${PROMETHEUS_HA_PORT}:${PROMETHEUS_HA_PORT}
+    expose:
+      - ${PROMETHEUS_HA_PORT}
+    depends_on:
+      - test_learn_ha
+    networks:
+      test_net:
+        ipv4_address: ${PROMETHEUS_HA_IP}
+    command: --haproxy.scrape-uri="http://${HA_PROXY_IP}:${HA_PROXY_PORT}/haproxy?stats;csv"
+
+
+  # run prometheus dashboard
+  test_learn_prometheus:
+    container_name: ${PROJECT_NAME}_prometheus
+    image: prom/prometheus:v2.24.0
+    ports:
+      - ${PROMETHEUS_PORT}:${PROMETHEUS_PORT}
+    expose:
+      - ${PROMETHEUS_PORT}
+    depends_on:
+      - test_learn_ha_exporter
+    networks:
+      test_net:
+        ipv4_address: ${PROMETHEUS_IP}
+    volumes:
+      - ./prometheus_cfg/:/etc/prometheus/
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      # - '--storage.tsdb.path=/prometheus'
+      # - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      # - '--web.console.templates=/usr/share/prometheus/consoles'
+
+  # run learn grafana
+  test_learn_grafana:
+    container_name: ${PROJECT_NAME}_grafana
+    image:  grafana/grafana:7.3.6
+    ports:
+      - ${GRAFANA_PORT}:${GRAFANA_PORT}
+    expose:
+      - ${GRAFANA_PORT}
+    depends_on:
+      - test_learn_prometheus
+    networks:
+      test_net:
+        ipv4_address: ${GRAFANA_IP}
+  
+
+networks:
+  test_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${NETWORK_SUBNET}
