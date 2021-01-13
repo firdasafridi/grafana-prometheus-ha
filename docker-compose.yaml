@@ -68,6 +68,18 @@ services:
         ipv4_address: ${PROMETHEUS_HA_IP}
     command: --haproxy.scrape-uri="http://${HA_PROXY_IP}:${HA_PROXY_PORT}/haproxy?stats;csv"
 
+  # run node exporter prometheus
+  test_learn_node_exporter:
+    container_name: ${PROJECT_NAME}_node_exporter
+    image: prom/node-exporter:latest
+    ports:
+      - ${PROMETHEUS_NODE_PORT}:${PROMETHEUS_NODE_PORT}
+    expose:
+      - ${PROMETHEUS_NODE_PORT}
+    networks:
+      test_net:
+        ipv4_address: ${PROMETHEUS_NODE_IP}
+
 
   # run prometheus dashboard
   test_learn_prometheus:
@@ -79,6 +91,7 @@ services:
       - ${PROMETHEUS_PORT}
     depends_on:
       - test_learn_ha_exporter
+      - test_learn_node_exporter
     networks:
       test_net:
         ipv4_address: ${PROMETHEUS_IP}
@@ -86,9 +99,6 @@ services:
       - ./prometheus_cfg/:/etc/prometheus/
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
-      # - '--storage.tsdb.path=/prometheus'
-      # - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      # - '--web.console.templates=/usr/share/prometheus/consoles'
 
   # run learn grafana
   test_learn_grafana:
